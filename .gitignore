@@ -31,3 +31,8 @@ build/
 # Test output
 tests/output/
 
+# Local testing scripts
+run_single.py
+run_batch.py
+
+
