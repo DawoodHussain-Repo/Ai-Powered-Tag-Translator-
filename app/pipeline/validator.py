@@ -29,7 +29,8 @@ def validate_extension(filename: str) -> None:
     if ext not in ALLOWED_EXTENSIONS:
         raise ValidationError(
             f"File extension '{ext}' is not allowed. "
-            f"Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            f"Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            code="INVALID_FILE_TYPE",
         )
 
 
@@ -43,7 +44,8 @@ def validate_mime(file_bytes: bytes) -> None:
     if detected not in ALLOWED_MIMES:
         raise ValidationError(
             f"MIME type '{detected}' is not allowed. "
-            f"Accepted: {', '.join(sorted(ALLOWED_MIMES))}"
+            f"Accepted: {', '.join(sorted(ALLOWED_MIMES))}",
+            code="INVALID_FILE_TYPE",
         )
 
 
@@ -57,7 +59,8 @@ def validate_file_size(file_bytes: bytes, settings: Settings) -> None:
     if len(file_bytes) > max_bytes:
         raise ValidationError(
             f"File size {len(file_bytes)} bytes exceeds the "
-            f"{settings.MAX_FILE_SIZE_MB} MB limit."
+            f"{settings.MAX_FILE_SIZE_MB} MB limit.",
+            code="INVALID_FILE_SIZE",
         )
 
 
@@ -77,7 +80,8 @@ def validate_image_opens(file_bytes: bytes) -> Image.Image:
         return img
     except Exception as exc:
         raise ValidationError(
-            f"Image file is corrupt or cannot be opened: {exc}"
+            f"Image file is corrupt or cannot be opened: {exc}",
+            code="CORRUPT_IMAGE",
         ) from exc
 
 
