@@ -17,8 +17,8 @@ before the next begins.
    `NotoSans-Regular.ttf` in `assets/fonts/`, `.env.example`, basic health check route
 2. **Node 1 — InputValidator** — file extension, MIME sniff, size cap, PIL open check;
    unit test with valid + invalid inputs
-3. **Node 2 — ImagePreprocessor** — sample border pixels for median brightness, adaptive
-   threshold/invert copy on dark backgrounds for OCR; unit test with dark/light backgrounds
+3. **Node 2 — ImagePreprocessor** — sample border pixels for median brightness, invert
+   copy on dark backgrounds for OCR; unit test with dark/light backgrounds
 4. **Node 3 — OCRExtractor** — pytesseract `image_to_data`, block grouping, confidence
    filter, noise filtering (non-alphanumeric, bbox area < MIN_BBOX_AREA); unit test against a known image with text
 5. **Node 4 — LanguageDetector** — pytesseract OSD script detection on preprocessed image;
@@ -31,7 +31,7 @@ before the next begins.
 7. **Node 6 — ImageCompositor** — background sampling, bbox fill, font auto-scale,
    text draw, coordinate clamping; unit test confirms output differs from input only
    in text regions
-8. **Node 7 — OutputVerifier** — re-OCR via pytesseract.image_to_string(), heuristic
+8. **Node 7 — OutputVerifier** — re-OCR via pytesseract.image_to_string() on the preprocessed composited image (inverted if dark background), heuristic
    presence check (non-empty text with alphabetic tokens of length > 2), retry routing;
    unit test confirms retry is triggered exactly once on first failure and that empty
    OCR output triggers the fail path

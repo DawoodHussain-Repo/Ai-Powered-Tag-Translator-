@@ -89,8 +89,7 @@
   the compositor
 - Background color sampling: take a 5-pixel border around each bounding box and use
   the median pixel value — do not assume white or any fixed background color
-- Foreground color sampling: sample pixels within the original bbox before erasure
-  and use the median dark pixel value as the text color
+- Foreground color sampling: sample pixels within the original bbox before erasure. If the background is dark (luminance < 128), use the median of the lightest pixels as the text color. If the background is light, use the median of the darkest pixels.
 - Font auto-scaling: start from the bbox height as the initial font size, reduce in
   steps of 1pt until the rendered text width fits within bbox width minus 2px padding
 - Minimum font size: 8pt — if text cannot fit, truncate with ellipsis rather than
@@ -121,7 +120,7 @@
 - `app/config.py` — pydantic-settings Config; no logic
 - `assets/fonts/` — bundled font files checked into git
 - `tests/` — pytest tests mirroring the `app/` structure
-- `samples/` — provided sample images for local testing
+- `sample_images_for_candidates/` — provided sample images for local testing
 - `.env.example` — template showing required env vars with no real values
 - `README.md` — setup instructions, example curl, design decisions, limitations
 

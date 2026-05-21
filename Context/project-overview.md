@@ -22,8 +22,8 @@ platform where vendors upload packaging or promotional images in non-English lan
 1. Client POSTs a multipart/form-data request with the image file to
    `POST /api/v1/translate-image`
 2. API validates the file (type, size, openable)
-3. API preprocesses the image — samples border pixel brightness and applies adaptive
-   thresholding or inversion for dark-background images to recover white-on-dark text
+3. API preprocesses the image — samples border pixel brightness and inverts the image
+   for dark-background images to recover white-on-dark text
 4. API runs OCR on the preprocessed image and extracts all text blocks with their
    bounding boxes
 5. API runs script detection (pytesseract OSD) on the preprocessed image; for
@@ -33,8 +33,8 @@ platform where vendors upload packaging or promotional images in non-English lan
 7. API sends extracted text to Gemini for English translation (per block)
 8. API composites the output: fills original text bounding boxes with sampled background
    color, then draws translated text at the same positions using Pillow
-9. API runs a verification pass (re-OCR on the output image) to confirm English text
-   is now present
+9. API runs a verification pass (re-OCR on the preprocessed/inverted version of the
+   output image) to confirm English text is now present
 10. API returns the output image as base64 with metadata (source language, blocks
     translated, verification result)
 
@@ -43,8 +43,8 @@ platform where vendors upload packaging or promotional images in non-English lan
 ### Core Pipeline
 
 - Image validation: extension allowlist, MIME type sniffing, file size cap, PIL open check
-- Image preprocessing: border pixel brightness sampling; adaptive threshold/invert
-  applied to dark-background images before OCR to recover white-on-dark text
+- Image preprocessing: border pixel brightness sampling; inversion applied to dark-background
+  images before OCR to recover white-on-dark text
 - OCR extraction: pytesseract `image_to_data()` for word/block-level text with bounding boxes
 - Script detection: pytesseract OSD on preprocessed image determines script family
 - Language detection: langdetect on concatenated OCR text, only for Latin-script images;
@@ -55,7 +55,8 @@ platform where vendors upload packaging or promotional images in non-English lan
   or batched blocks per image
 - Image compositing: Pillow fills each bounding box with a sampled background color,
   then draws translated text with auto-scaled font to fit the bounding box
-- Output verification: re-OCR of the composited image; heuristic presence check
+- Output verification: re-OCR of the preprocessed/inverted version of the composited image;
+  heuristic presence check
   confirms non-empty alphabetic text; if check fails, one retry of translation and
   compositing before returning 200 with partial output and status=verification_failed
 - Structured JSON response with base64 output image, source language, per-block metadata,

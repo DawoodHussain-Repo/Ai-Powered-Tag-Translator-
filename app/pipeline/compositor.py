@@ -100,11 +100,13 @@ def _sample_foreground_color(
     y: int,
     w: int,
     h: int,
+    bg_color: tuple[int, ...] | None = None,
 ) -> tuple[int, ...]:
     """Sample the text (foreground) color from within the bounding box.
 
-    Uses the median of the darkest pixels within the bbox as the text
-    colour.  "Darkest" is determined by the sum of channel values.
+    If the background is dark (luminance < 128), uses the median of the
+    lightest pixels within the bbox. If the background is light, uses
+    the median of the darkest pixels.
     """
     pixels: list[tuple[int, ...]] = []
     img_w, img_h = image.size
@@ -117,13 +119,32 @@ def _sample_foreground_color(
         n_channels = len(image.getbands())
         return tuple([0] * n_channels)
 
-    # Sort by luminance (sum of channels) and take the darker half
-    pixels.sort(key=lambda p: sum(p))
-    dark_half = pixels[: max(1, len(pixels) // 4)]
+    if bg_color is None:
+        bg_color = _sample_background_color(image, x, y, w, h)
 
-    n_channels = len(dark_half[0])
+    if len(bg_color) >= 3:
+        bg_luminance = 0.299 * bg_color[0] + 0.587 * bg_color[1] + 0.114 * bg_color[2]
+    else:
+        bg_luminance = bg_color[0]
+
+    if bg_luminance < 128:
+        # Dark background -> text is light. Sort descending by luminance.
+        pixels.sort(
+            key=lambda p: 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2] if len(p) >= 3 else p[0],
+            reverse=True,
+        )
+    else:
+        # Light background -> text is dark. Sort ascending by luminance.
+        pixels.sort(
+            key=lambda p: 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2] if len(p) >= 3 else p[0],
+            reverse=False,
+        )
+
+    top_quarter = pixels[: max(1, len(pixels) // 4)]
+
+    n_channels = len(top_quarter[0])
     return tuple(
-        int(statistics.median(p[ch] for p in dark_half))
+        int(statistics.median(p[ch] for p in top_quarter))
         for ch in range(n_channels)
     )
 
@@ -230,7 +251,7 @@ def composite_image(
 
             # --- Step A: Sample colours BEFORE erasure ---
             bg_color = _sample_background_color(original_rgb, x, y, w, h)
-            fg_color = _sample_foreground_color(original_rgb, x, y, w, h)
+            fg_color = _sample_foreground_color(original_rgb, x, y, w, h, bg_color)
 
             # --- Step A: Erase original text ---
             draw.rectangle(

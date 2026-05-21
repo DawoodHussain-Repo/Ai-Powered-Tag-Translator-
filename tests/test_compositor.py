@@ -115,6 +115,15 @@ class TestSampleForegroundColor:
         # The darkest pixels should be close to the text colour
         assert all(ch < 128 for ch in fg)
 
+    def test_light_text_on_dark_bg(self) -> None:
+        """Foreground sample should return a light colour for light text on dark background."""
+        img = _make_image_with_text(
+            "HELLO", bg_color=(10, 10, 10), fg_color=(250, 250, 250)
+        )
+        fg = _sample_foreground_color(img, 20, 20, 150, 50)
+        # The lightest pixels should be close to the text colour
+        assert all(ch > 128 for ch in fg)
+
     def test_returns_tuple(self) -> None:
         img = Image.new("RGB", (200, 200), color=(50, 50, 50))
         fg = _sample_foreground_color(img, 10, 10, 50, 50)

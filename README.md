@@ -57,5 +57,4 @@ curl http://localhost:8000/api/v1/health
 - **Non-text symbols rendered inconsistently**: Non-text and decorative Unicode characters (such as list bullets `•`) may be stripped out by the OCR noise filter.
 - **Mixed-background images partially fail**: Full-dark or full-light backgrounds are detected globally, but images containing both dark and light sections (e.g. dark headers with light cream bodies) are not preprocessed per-region.
 - **Complex layout constraints**: Rotated, vertical, or overlapping text layouts are not supported.
-- **No Latin-script early-return**: The English early-return optimization is not implemented for Latin-script languages. All images with detectable text are sent to Gemini for translation. Gemini handles the case where text is already in English by returning it unchanged.
 

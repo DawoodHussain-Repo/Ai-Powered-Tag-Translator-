@@ -34,8 +34,8 @@ POST /api/v1/translate-image (multipart/form-data: file)
         ▼
 [Node 2] ImagePreprocessor
         │  Method: Sample border pixels of the image, compute median brightness
-        │  Dark background: If median brightness < 128, produce an adaptive-thresholded
-        │                  or inverted copy of the image to serve as the OCR input
+        │  Dark background: If median brightness < 128, produce an inverted
+        │                  copy of the image to serve as the OCR input
         │  Light background: Pass through the original image unchanged
         │  Output: PIL Image (either original or preprocessed for OCR only)
         │  Invariant: Preprocessed image is only used for OCRExtractor and LanguageDetector;
@@ -92,7 +92,7 @@ POST /api/v1/translate-image (multipart/form-data: file)
         │
         ▼
 [Node 7] OutputVerifier
-        │  Tool: pytesseract.image_to_string() on composited image
+        │  Tool: pytesseract.image_to_string() on preprocessed composited image (inverted if dark background)
         │  Check: re-OCR'd text is non-empty AND contains at least one alphabetic token
         │         of length > 2 (heuristic presence check — not language classification)
         │  Pass: check passes → proceed to Node 8
@@ -169,7 +169,9 @@ POST /api/v1/translate-image (multipart/form-data: file)
 6. **Bounding box coordinates are always validated before compositing.**
    Coordinates are clamped to image dimensions before any PIL draw call to prevent
    out-of-bounds errors on edge-case OCR results.
-7. **The preprocessed image is used only by OCRExtractor and LanguageDetector, never by ImageCompositor or downstream nodes.**
-   To ensure the visual layout and content of the original image are preserved, any
-   adaptive-thresholded or inverted copy created for improving OCR quality must be kept isolated
-   to the extraction/detection phases. The original unmodified image is always passed to the compositor.
+7. **The preprocessed input image is used only by OCRExtractor and LanguageDetector, never by ImageCompositor.**
+    To ensure the visual layout and content of the original image are preserved, any
+    inverted copy created for improving OCR quality must be kept isolated
+    to the extraction/detection phases. The original unmodified image is always passed to the compositor.
+   Note that the OutputVerifier uses a newly preprocessed version of the composited output image
+   to verify light-on-dark text successfully.

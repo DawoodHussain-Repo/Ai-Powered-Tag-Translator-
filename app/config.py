@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     MAX_FILE_SIZE_MB: int = 10
     MIN_OCR_CONFIDENCE: int = 40
+    MIN_BBOX_AREA: int = 100
     GEMINI_MODEL: str = "gemini-1.5-flash"
+    LANGDETECT_MIN_CONFIDENCE: float = 0.9
 
 
 def get_settings() -> Settings:

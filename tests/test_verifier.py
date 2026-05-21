@@ -12,19 +12,12 @@ from app.pipeline.verifier import verify_output
 # Helpers
 # ---------------------------------------------------------------------------
 
-_FONT_PATH = "assets/fonts/NotoSans-Regular.ttf"
-
-
-def _make_image_with_text(
-    text: str,
-    size: tuple[int, int] = (400, 100),
-    font_size: int = 40,
-) -> Image.Image:
-    """Create a test image with clear text on a white background."""
-    img = Image.new("RGB", size, color=(255, 255, 255))
+def _make_image_with_text(text: str = "HELLO WORLD") -> Image.Image:
+    """Create a test image with visible text on a white background."""
+    img = Image.new("RGB", (400, 100), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
     try:
-        font = ImageFont.truetype(_FONT_PATH, font_size)
+        font = ImageFont.truetype("assets/fonts/NotoSans-Regular.ttf", 40)
     except OSError:
         font = ImageFont.load_default()
     draw.text((20, 20), text, fill=(0, 0, 0), font=font)
@@ -32,64 +25,105 @@ def _make_image_with_text(
 
 
 def _make_blank_image() -> Image.Image:
+    """Create a blank white image with no text."""
     return Image.new("RGB", (200, 200), color=(255, 255, 255))
 
 
 # ---------------------------------------------------------------------------
-# verify_output
+# Tests
 # ---------------------------------------------------------------------------
 
 class TestVerifyOutput:
-    def test_english_text_passes(self) -> None:
-        """Image with English text should return 'pass'."""
-        img = _make_image_with_text("Hello World Testing")
+    """Tests for the heuristic presence check verifier."""
+
+    def test_image_with_text_passes(self) -> None:
+        """An image with clear alphabetic text should pass."""
+        img = _make_image_with_text("TRANSLATED TEXT")
         result = verify_output(img)
         assert result == "pass"
 
     def test_blank_image_fails(self) -> None:
-        """Image with no text should return 'fail'."""
+        """A blank image with no text should fail."""
         img = _make_blank_image()
         result = verify_output(img)
         assert result == "fail"
 
-    def test_non_english_text_fails(self) -> None:
-        """Image with non-English text should return 'fail'."""
-        img = _make_image_with_text("Esta es una prueba en espanol")
-        result = verify_output(img)
-        assert result == "fail"
-
-    def test_tesseract_failure_returns_fail(self) -> None:
-        """If Tesseract crashes, should return 'fail' not raise."""
-        img = _make_image_with_text("Hello")
+    def test_empty_ocr_output_fails(self) -> None:
+        """If OCR returns empty string, should fail."""
+        img = _make_image_with_text("TEST")
         with patch(
             "app.pipeline.verifier.pytesseract.image_to_string",
-            side_effect=Exception("tesseract error"),
+            return_value="",
         ):
             result = verify_output(img)
             assert result == "fail"
 
-    def test_langdetect_failure_returns_fail(self) -> None:
-        """If langdetect crashes, should return 'fail' not raise."""
-        img = _make_image_with_text("Hello")
+    def test_only_numbers_fails(self) -> None:
+        """Text containing only numbers (no alphabetic tokens > 2) should fail."""
+        img = _make_image_with_text("123")
         with patch(
-            "app.pipeline.verifier.detect",
-            side_effect=Exception("detection error"),
+            "app.pipeline.verifier.pytesseract.image_to_string",
+            return_value="12345 67890",
         ):
             result = verify_output(img)
             assert result == "fail"
 
-    def test_retry_scenario_mock(self) -> None:
-        """Simulate: first call returns 'fail', verifying retry is needed.
+    def test_only_symbols_fails(self) -> None:
+        """Text containing only symbols should fail."""
+        img = _make_image_with_text("...")
+        with patch(
+            "app.pipeline.verifier.pytesseract.image_to_string",
+            return_value="... --- !!!",
+        ):
+            result = verify_output(img)
+            assert result == "fail"
 
-        This tests that verify_output can be called twice and returns
-        different results based on the image content.
-        """
-        # First call with Spanish text
-        spanish_img = _make_image_with_text("Hola Mundo prueba texto")
-        first_result = verify_output(spanish_img)
-        assert first_result == "fail"
+    def test_short_alpha_tokens_fail(self) -> None:
+        """Alphabetic tokens of length <= 2 should not pass the check."""
+        img = _make_image_with_text("AB")
+        with patch(
+            "app.pipeline.verifier.pytesseract.image_to_string",
+            return_value="A B AB",
+        ):
+            result = verify_output(img)
+            assert result == "fail"
 
-        # Second call with English text (after retry translation)
-        english_img = _make_image_with_text("Hello World test text")
-        second_result = verify_output(english_img)
-        assert second_result == "pass"
+    def test_mixed_text_with_long_token_passes(self) -> None:
+        """Text with at least one alphabetic token > 2 chars should pass."""
+        img = _make_image_with_text("OK")
+        with patch(
+            "app.pipeline.verifier.pytesseract.image_to_string",
+            return_value="123 Hello 456",
+        ):
+            result = verify_output(img)
+            assert result == "pass"
+
+    def test_tesseract_exception_fails(self) -> None:
+        """If Tesseract crashes, should return fail."""
+        img = _make_image_with_text("TEST")
+        with patch(
+            "app.pipeline.verifier.pytesseract.image_to_string",
+            side_effect=Exception("tesseract crashed"),
+        ):
+            result = verify_output(img)
+            assert result == "fail"
+
+    def test_whitespace_only_fails(self) -> None:
+        """Whitespace-only OCR output should fail."""
+        img = _make_image_with_text("TEST")
+        with patch(
+            "app.pipeline.verifier.pytesseract.image_to_string",
+            return_value="   \n  \t  ",
+        ):
+            result = verify_output(img)
+            assert result == "fail"
+
+    def test_three_char_alpha_token_passes(self) -> None:
+        """A 3-character alphabetic token (length > 2) should pass."""
+        img = _make_image_with_text("THE")
+        with patch(
+            "app.pipeline.verifier.pytesseract.image_to_string",
+            return_value="THE",
+        ):
+            result = verify_output(img)
+            assert result == "pass"

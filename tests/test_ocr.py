@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from app.config import Settings
 from app.exceptions import OCRError
 from app.models.schemas import TextBlock
-from app.pipeline.ocr import extract_text, _group_words_into_blocks
+from app.pipeline.ocr import extract_text, _group_words_into_blocks, _is_noise
 
 
 # ---------------------------------------------------------------------------
@@ -22,7 +22,9 @@ def _create_test_settings(**overrides: object) -> Settings:
         "GEMINI_API_KEY": "test-key",
         "MAX_FILE_SIZE_MB": 10,
         "MIN_OCR_CONFIDENCE": 40,
+        "MIN_BBOX_AREA": 100,
         "GEMINI_MODEL": "gemini-1.5-flash",
+        "LANGDETECT_MIN_CONFIDENCE": 0.9,
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -174,6 +176,85 @@ class TestGroupWordsIntoBlocks:
         blocks = _group_words_into_blocks(ocr_data, min_confidence=0)
         # -1 < 0 so filtered out
         assert len(blocks) == 0
+
+
+# ---------------------------------------------------------------------------
+# Noise filtering tests
+# ---------------------------------------------------------------------------
+
+class TestNoiseFiltering:
+    """Tests for OCR noise/artifact filtering."""
+
+    def test_is_noise_single_bullet(self) -> None:
+        """A single bullet character is noise."""
+        assert _is_noise("\u2022") is True
+
+    def test_is_noise_single_pipe(self) -> None:
+        """A single pipe character is noise."""
+        assert _is_noise("|") is True
+
+    def test_is_noise_single_dash(self) -> None:
+        """A single dash is noise."""
+        assert _is_noise("-") is True
+
+    def test_is_noise_single_letter(self) -> None:
+        """A single alphanumeric character is NOT noise."""
+        assert _is_noise("A") is False
+
+    def test_is_noise_word(self) -> None:
+        """A multi-character word is NOT noise."""
+        assert _is_noise("Hello") is False
+
+    def test_single_nonalpha_block_filtered(self) -> None:
+        """Blocks containing only a single non-alphanumeric char are removed."""
+        ocr_data = {
+            "text": ["\u2022", "Hello"],
+            "conf": [90, 90],
+            "block_num": [1, 2],
+            "par_num": [1, 1],
+            "line_num": [1, 1],
+            "left": [10, 100],
+            "top": [10, 10],
+            "width": [20, 60],
+            "height": [20, 20],
+        }
+        blocks = _group_words_into_blocks(ocr_data, min_confidence=0, min_bbox_area=0)
+        assert len(blocks) == 1
+        assert blocks[0].text == "Hello"
+
+    def test_small_bbox_area_filtered(self) -> None:
+        """Blocks with bbox area below MIN_BBOX_AREA are removed."""
+        ocr_data = {
+            "text": ["Tiny", "Normal"],
+            "conf": [90, 90],
+            "block_num": [1, 2],
+            "par_num": [1, 1],
+            "line_num": [1, 1],
+            "left": [10, 100],
+            "top": [10, 10],
+            "width": [5, 60],   # Tiny: 5x5=25 < 100
+            "height": [5, 20],  # Normal: 60x20=1200 >= 100
+        }
+        blocks = _group_words_into_blocks(ocr_data, min_confidence=0, min_bbox_area=100)
+        assert len(blocks) == 1
+        assert blocks[0].text == "Normal"
+
+    def test_bbox_area_exactly_threshold_passes(self) -> None:
+        """A block with bbox area exactly equal to MIN_BBOX_AREA should pass."""
+        ocr_data = {
+            "text": ["Edge"],
+            "conf": [90],
+            "block_num": [1],
+            "par_num": [1],
+            "line_num": [1],
+            "left": [10],
+            "top": [10],
+            "width": [10],
+            "height": [10],  # 10x10=100, exactly at threshold
+        }
+        blocks = _group_words_into_blocks(ocr_data, min_confidence=0, min_bbox_area=100)
+        assert len(blocks) == 1
+        assert blocks[0].text == "Edge"
 
 
 # ---------------------------------------------------------------------------

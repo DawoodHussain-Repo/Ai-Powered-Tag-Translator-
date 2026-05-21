@@ -12,6 +12,7 @@ from app.config import get_settings, Settings
 from app.exceptions import CompositorError, TranslationError, ValidationError
 from app.main import app
 from app.models.schemas import TextBlock, TranslatedBlock
+from app.pipeline.language import LanguageResult
 
 
 client = TestClient(app)
@@ -24,7 +25,9 @@ def override_settings() -> None:
             GEMINI_API_KEY="test-key-not-real",
             MAX_FILE_SIZE_MB=10,
             MIN_OCR_CONFIDENCE=40,
+            MIN_BBOX_AREA=100,
             GEMINI_MODEL="gemini-1.5-flash",
+            LANGDETECT_MIN_CONFIDENCE=0.9,
         )
     app.dependency_overrides[get_settings] = get_test_settings
     yield
@@ -80,13 +83,15 @@ class TestTranslateImageRoute:
         assert data["error"] == "Invalid file size"
 
     @patch("app.api.routes.validate_input")
+    @patch("app.api.routes.preprocess_for_ocr")
     @patch("app.api.routes.extract_text")
     def test_no_text_found_early_return(
-        self, mock_extract: MagicMock, mock_validate: MagicMock
+        self, mock_extract: MagicMock, mock_preprocess: MagicMock, mock_validate: MagicMock
     ) -> None:
         """If OCR finds no text, return 200 with status 'no_text_found'."""
         mock_img = Image.new("RGB", (10, 10))
         mock_validate.return_value = mock_img
+        mock_preprocess.return_value = mock_img
         mock_extract.return_value = []  # No text blocks found
 
         img_bytes = _make_image_bytes("PNG")
@@ -101,21 +106,24 @@ class TestTranslateImageRoute:
         assert data["source_language"] is None
 
     @patch("app.api.routes.validate_input")
+    @patch("app.api.routes.preprocess_for_ocr")
     @patch("app.api.routes.extract_text")
     @patch("app.api.routes.detect_language")
     def test_already_english_early_return(
         self,
         mock_detect: MagicMock,
         mock_extract: MagicMock,
+        mock_preprocess: MagicMock,
         mock_validate: MagicMock,
     ) -> None:
         """If source language is English, return 200 with status 'already_english'."""
         mock_img = Image.new("RGB", (10, 10))
         mock_validate.return_value = mock_img
+        mock_preprocess.return_value = mock_img
         mock_extract.return_value = [
             TextBlock(text="English text", bbox=(0, 0, 5, 5), confidence=99)
         ]
-        mock_detect.return_value = "en"
+        mock_detect.return_value = LanguageResult(language_code="en", is_english=True)
 
         img_bytes = _make_image_bytes("PNG")
         response = client.post(
@@ -129,6 +137,7 @@ class TestTranslateImageRoute:
         assert data["blocks_translated"] == 0
 
     @patch("app.api.routes.validate_input")
+    @patch("app.api.routes.preprocess_for_ocr")
     @patch("app.api.routes.extract_text")
     @patch("app.api.routes.detect_language")
     @patch("app.api.routes.translate_blocks")
@@ -141,15 +150,17 @@ class TestTranslateImageRoute:
         mock_translate: MagicMock,
         mock_detect: MagicMock,
         mock_extract: MagicMock,
+        mock_preprocess: MagicMock,
         mock_validate: MagicMock,
     ) -> None:
         """Success path where the first translation verification passes."""
         mock_img = Image.new("RGB", (10, 10))
         mock_validate.return_value = mock_img
+        mock_preprocess.return_value = mock_img
         mock_extract.return_value = [
             TextBlock(text="Hola", bbox=(0, 0, 5, 5), confidence=99)
         ]
-        mock_detect.return_value = "es"
+        mock_detect.return_value = LanguageResult(language_code="es", is_english=False)
         mock_translate.return_value = [
             TranslatedBlock(original_text="Hola", translated_text="Hello", bbox=(0, 0, 5, 5))
         ]
@@ -170,6 +181,7 @@ class TestTranslateImageRoute:
         mock_verify.assert_called_once()
 
     @patch("app.api.routes.validate_input")
+    @patch("app.api.routes.preprocess_for_ocr")
     @patch("app.api.routes.extract_text")
     @patch("app.api.routes.detect_language")
     @patch("app.api.routes.translate_blocks")
@@ -182,15 +194,17 @@ class TestTranslateImageRoute:
         mock_translate: MagicMock,
         mock_detect: MagicMock,
         mock_extract: MagicMock,
+        mock_preprocess: MagicMock,
         mock_validate: MagicMock,
     ) -> None:
         """Retry path where the first verification fails but the second passes."""
         mock_img = Image.new("RGB", (10, 10))
         mock_validate.return_value = mock_img
+        mock_preprocess.return_value = mock_img
         mock_extract.return_value = [
             TextBlock(text="Hola", bbox=(0, 0, 5, 5), confidence=99)
         ]
-        mock_detect.return_value = "es"
+        mock_detect.return_value = LanguageResult(language_code="es", is_english=False)
 
         # Translation mock returns original attempt, then retry attempt
         t1 = TranslatedBlock(original_text="Hola", translated_text="Hello Attempt 1", bbox=(0, 0, 5, 5))
@@ -226,6 +240,7 @@ class TestTranslateImageRoute:
         )
 
     @patch("app.api.routes.validate_input")
+    @patch("app.api.routes.preprocess_for_ocr")
     @patch("app.api.routes.extract_text")
     @patch("app.api.routes.detect_language")
     @patch("app.api.routes.translate_blocks")
@@ -238,15 +253,17 @@ class TestTranslateImageRoute:
         mock_translate: MagicMock,
         mock_detect: MagicMock,
         mock_extract: MagicMock,
+        mock_preprocess: MagicMock,
         mock_validate: MagicMock,
     ) -> None:
         """If both attempts fail verification, return 200 with status 'verification_failed'."""
         mock_img = Image.new("RGB", (10, 10))
         mock_validate.return_value = mock_img
+        mock_preprocess.return_value = mock_img
         mock_extract.return_value = [
             TextBlock(text="Hola", bbox=(0, 0, 5, 5), confidence=99)
         ]
-        mock_detect.return_value = "es"
+        mock_detect.return_value = LanguageResult(language_code="es", is_english=False)
         mock_translate.return_value = [
             TranslatedBlock(original_text="Hola", translated_text="Fail Text", bbox=(0, 0, 5, 5))
         ]
@@ -266,6 +283,7 @@ class TestTranslateImageRoute:
         assert data["blocks_translated"] == 1
 
     @patch("app.api.routes.validate_input")
+    @patch("app.api.routes.preprocess_for_ocr")
     @patch("app.api.routes.extract_text")
     @patch("app.api.routes.detect_language")
     @patch("app.api.routes.translate_blocks")
@@ -274,15 +292,17 @@ class TestTranslateImageRoute:
         mock_translate: MagicMock,
         mock_detect: MagicMock,
         mock_extract: MagicMock,
+        mock_preprocess: MagicMock,
         mock_validate: MagicMock,
     ) -> None:
         """A TranslationError maps to 500 with TRANSLATION_FAILED code."""
         mock_img = Image.new("RGB", (10, 10))
         mock_validate.return_value = mock_img
+        mock_preprocess.return_value = mock_img
         mock_extract.return_value = [
             TextBlock(text="Hola", bbox=(0, 0, 5, 5), confidence=99)
         ]
-        mock_detect.return_value = "es"
+        mock_detect.return_value = LanguageResult(language_code="es", is_english=False)
         mock_translate.side_effect = TranslationError("Gemini quota exceeded")
 
         img_bytes = _make_image_bytes("PNG")
@@ -296,6 +316,7 @@ class TestTranslateImageRoute:
         assert data["error"] == "Gemini quota exceeded"
 
     @patch("app.api.routes.validate_input")
+    @patch("app.api.routes.preprocess_for_ocr")
     @patch("app.api.routes.extract_text")
     @patch("app.api.routes.detect_language")
     @patch("app.api.routes.translate_blocks")
@@ -306,15 +327,17 @@ class TestTranslateImageRoute:
         mock_translate: MagicMock,
         mock_detect: MagicMock,
         mock_extract: MagicMock,
+        mock_preprocess: MagicMock,
         mock_validate: MagicMock,
     ) -> None:
         """A CompositorError maps to 500 with COMPOSITOR_FAILED code."""
         mock_img = Image.new("RGB", (10, 10))
         mock_validate.return_value = mock_img
+        mock_preprocess.return_value = mock_img
         mock_extract.return_value = [
             TextBlock(text="Hola", bbox=(0, 0, 5, 5), confidence=99)
         ]
-        mock_detect.return_value = "es"
+        mock_detect.return_value = LanguageResult(language_code="es", is_english=False)
         mock_translate.return_value = [
             TranslatedBlock(original_text="Hola", translated_text="Hello", bbox=(0, 0, 5, 5))
         ]

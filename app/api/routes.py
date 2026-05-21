@@ -9,8 +9,9 @@ from app.config import Settings, get_settings
 from app.exceptions import PipelineError, ValidationError
 from app.models.schemas import ErrorResponse, PipelineResult
 from app.pipeline.compositor import composite_image
-from app.pipeline.language import detect_language, is_english
+from app.pipeline.language import detect_language
 from app.pipeline.ocr import extract_text
+from app.pipeline.preprocessor import preprocess_for_ocr
 from app.pipeline.serializer import serialize_response
 from app.pipeline.translator import translate_blocks
 from app.pipeline.validator import validate_input
@@ -44,13 +45,14 @@ async def translate_image(
 
     This route orchestrates the entire translation pipeline:
     1. Validates the request headers and file extension.
-    2. Sniifs MIME type and size, opening the image (Node 1 - InputValidator).
-    3. Runs OCR to extract text blocks (Node 2 - OCRExtractor).
-    4. Detects the language (Node 3 - LanguageDetector).
-    5. Translates the text blocks to English (Node 4 - TextTranslator).
-    6. Composites the translated text onto the image (Node 5 - ImageCompositor).
-    7. Verifies the output is in English (Node 6 - OutputVerifier), retrying once on failure.
-    8. Serializes and returns the final response (Node 7 - ResponseSerializer).
+    2. Sniffs MIME type and size, opening the image (Node 1 - InputValidator).
+    3. Preprocesses the image for dark backgrounds (Node 2 - ImagePreprocessor).
+    4. Runs OCR to extract text blocks (Node 3 - OCRExtractor).
+    5. Detects the script/language (Node 4 - LanguageDetector).
+    6. Translates the text blocks to English (Node 5 - TextTranslator).
+    7. Composites the translated text onto the image (Node 6 - ImageCompositor).
+    8. Verifies the output has readable text (Node 7 - OutputVerifier), retrying once on failure.
+    9. Serializes and returns the final response (Node 8 - ResponseSerializer).
     """
     try:
         # Request validation (file extension, content-type header) done in the route
@@ -74,8 +76,13 @@ async def translate_image(
         # Node 1: InputValidator (performs MIME sniffing, size check, PIL open)
         image = validate_input(filename, file_bytes, settings)
 
-        # Node 2: OCRExtractor
-        blocks = extract_text(image, settings)
+        # Node 2: ImagePreprocessor
+        # Preprocessed image is used ONLY by OCRExtractor and LanguageDetector.
+        # The original unmodified image is always passed to the compositor.
+        preprocessed_image = preprocess_for_ocr(image)
+
+        # Node 3: OCRExtractor (runs on preprocessed image)
+        blocks = extract_text(preprocessed_image, settings)
         if not blocks:
             return serialize_response(
                 image=image,
@@ -84,58 +91,58 @@ async def translate_image(
                 blocks_translated=0,
             )
 
-        # Node 3: LanguageDetector
-        detected_lang = detect_language(blocks)
-        if is_english(detected_lang):
+        # Node 4: LanguageDetector (OSD on preprocessed image + langdetect on OCR text)
+        lang_result = detect_language(preprocessed_image, blocks, settings)
+        if lang_result.is_english:
             return serialize_response(
                 image=image,
                 status="already_english",
-                source_language=detected_lang,
+                source_language=lang_result.language_code,
                 blocks_translated=0,
             )
 
-        # Node 4: TextTranslator (Attempt 1)
+        # Node 5: TextTranslator (Attempt 1)
         translated_blocks = translate_blocks(
             blocks=blocks,
-            source_language=detected_lang,
+            source_language=lang_result.language_code,
             settings=settings,
             retry=False,
         )
 
-        # Node 5: ImageCompositor (Attempt 1)
+        # Node 6: ImageCompositor (Attempt 1) — uses original image, not preprocessed
         composited_image = composite_image(image, translated_blocks)
 
-        # Node 6: OutputVerifier (Attempt 1)
-        verification_status = verify_output(composited_image)
+        # Node 7: OutputVerifier (Attempt 1)
+        verification_status = verify_output(preprocess_for_ocr(composited_image))
 
         if verification_status == "pass":
             return serialize_response(
                 image=composited_image,
                 status="translated",
-                source_language=detected_lang,
+                source_language=lang_result.language_code,
                 blocks_translated=len(translated_blocks),
             )
 
-        # Verification failed — execute single retry loop (Steps 4-5 retry)
-        # Node 4: TextTranslator (Attempt 2 - Retry)
+        # Verification failed — execute single retry loop (Steps 5-6 retry)
+        # Node 5: TextTranslator (Attempt 2 - Retry)
         translated_blocks_retry = translate_blocks(
             blocks=blocks,
-            source_language=detected_lang,
+            source_language=lang_result.language_code,
             settings=settings,
             retry=True,
         )
 
-        # Node 5: ImageCompositor (Attempt 2 - Retry)
+        # Node 6: ImageCompositor (Attempt 2 - Retry)
         composited_image_retry = composite_image(image, translated_blocks_retry)
 
-        # Node 6: OutputVerifier (Attempt 2 - Retry)
-        verification_status_retry = verify_output(composited_image_retry)
+        # Node 7: OutputVerifier (Attempt 2 - Retry)
+        verification_status_retry = verify_output(preprocess_for_ocr(composited_image_retry))
 
         if verification_status_retry == "pass":
             return serialize_response(
                 image=composited_image_retry,
                 status="translated",
-                source_language=detected_lang,
+                source_language=lang_result.language_code,
                 blocks_translated=len(translated_blocks_retry),
             )
 
@@ -143,7 +150,7 @@ async def translate_image(
         return serialize_response(
             image=composited_image_retry,
             status="verification_failed",
-            source_language=detected_lang,
+            source_language=lang_result.language_code,
             blocks_translated=len(translated_blocks_retry),
         )
 
