@@ -55,10 +55,12 @@ POST /api/v1/translate-image (multipart/form-data: file)
         ▼
 [Node 4] LanguageDetector
         │  Tool: pytesseract.image_to_osd(preprocessed_image) to determine script
-        │  Output: Script/Language information (e.g. "Latin", "Cyrillic")
-        │  Already English/Latin script match: return 200 + original image + status=already_english
-        │                                       (no Gemini call made)
-        │  Failure / undetermined / non-Latin: proceed to translation with lang="unknown"
+        │  Output: Script information (e.g. "Latin", "Cyrillic")
+        │  Logic: Because English and Spanish both share the Latin script, OSD script
+        │         detection cannot differentiate them. All Latin-script text is sent to
+        │         Gemini for translation. The "already_english" early-return optimization is
+        │         removed for Latin-script images.
+        │  Action: Proceed to translation with detected script info.
         │
         ▼
 [Node 5] TextTranslator                             ◄─── retry point
@@ -148,9 +150,10 @@ POST /api/v1/translate-image (multipart/form-data: file)
 2. **Gemini is called only for text translation, never for image generation.**
    The output image is always derived from the original via Pillow compositing — never
    AI-generated or regenerated.
-3. **If the image is already in English, no external API call is made.**
-   Language detection is local (pytesseract OSD); the Gemini API is only called when
-   translation is actually needed.
+3. **No local language classification is performed for Latin-script text.**
+   Because OSD script detection cannot distinguish English from Spanish or other Latin-script
+   languages, all Latin-script text is sent to Gemini for translation. Gemini handles
+   the case where text is already English by returning it unchanged.
 4. **Each pipeline node has a single responsibility.** No node performs two pipeline
    steps. The route handler in `routes.py` is the only place that knows the node order.
 5. **No background tasks or async work is spawned inside a request handler.**

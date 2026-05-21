@@ -7,10 +7,10 @@ This document tracks the implementation status of all pipeline nodes, workflow u
 - `[x]` **Node 1: InputValidator** (Unit 2)
 - `[ ]` **Node 2: ImagePreprocessor** (Unit 3) - *Pending implementation*
 - `[x]` **Node 3: OCRExtractor** (Unit 4) - *Completed, pending update for filtering/MIN_BBOX_AREA*
-- `[x]` **Node 4: LanguageDetector** (Unit 5) - *Completed, pending migration from langdetect to pytesseract OSD*
+- `[x]` **Node 4: LanguageDetector** (Unit 5) - *Completed, pending migration to pytesseract OSD (with Latin-script early-return disabled)*
 - `[x]` **Node 5: TextTranslator** (Unit 6)
 - `[x]` **Node 6: ImageCompositor** (Unit 7)
-- `[x]` **Node 7: OutputVerifier** (Unit 8) - *Completed, pending migration from langdetect to pytesseract OSD*
+- `[x]` **Node 7: OutputVerifier** (Unit 8) - *Completed, pending migration to pytesseract OSD (with Latin-script early-return disabled)*
 - `[x]` **Node 8: ResponseSerializer** (Unit 9)
 
 ## Workflow Units Status
