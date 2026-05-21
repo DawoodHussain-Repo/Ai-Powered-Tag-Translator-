@@ -22,27 +22,30 @@ platform where vendors upload packaging or promotional images in non-English lan
 1. Client POSTs a multipart/form-data request with the image file to
    `POST /api/v1/translate-image`
 2. API validates the file (type, size, openable)
-3. API runs OCR on the image and extracts all text blocks with their bounding boxes
-4. API runs script detection (pytesseract OSD) on the preprocessed image; for
+3. API preprocesses the image — samples border pixel brightness and applies adaptive
+   thresholding or inversion for dark-background images to recover white-on-dark text
+4. API runs OCR on the preprocessed image and extracts all text blocks with their
+   bounding boxes
+5. API runs script detection (pytesseract OSD) on the preprocessed image; for
    Latin-script results, langdetect runs on the OCR text to identify the language
-5. If the text is detected as English with sufficient confidence, the original image
+6. If the text is detected as English with sufficient confidence, the original image
    is returned immediately with status=already_english and no Gemini call is made
-6. API sends extracted text to Gemini for English translation (per block)
-7. API composites the output: fills original text bounding boxes with sampled background
+7. API sends extracted text to Gemini for English translation (per block)
+8. API composites the output: fills original text bounding boxes with sampled background
    color, then draws translated text at the same positions using Pillow
-8. API runs a verification pass (re-OCR on the output image) to confirm English text
+9. API runs a verification pass (re-OCR on the output image) to confirm English text
    is now present
-9. API returns the output image as base64 with metadata (source language, blocks
-   translated, verification result)
+10. API returns the output image as base64 with metadata (source language, blocks
+    translated, verification result)
 
 ## Features
 
 ### Core Pipeline
 
 - Image validation: extension allowlist, MIME type sniffing, file size cap, PIL open check
-- OCR extraction: pytesseract `image_to_data()` for word/block-level text with bounding boxes
 - Image preprocessing: border pixel brightness sampling; adaptive threshold/invert
   applied to dark-background images before OCR to recover white-on-dark text
+- OCR extraction: pytesseract `image_to_data()` for word/block-level text with bounding boxes
 - Script detection: pytesseract OSD on preprocessed image determines script family
 - Language detection: langdetect on concatenated OCR text, only for Latin-script images;
   fails open on low confidence or errors
