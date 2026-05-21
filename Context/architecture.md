@@ -49,6 +49,10 @@ POST /api/v1/translate-image (multipart/form-data: file)
         │           (group by block_num + par_num + line_num from tesseract output)
         │  Filters: confidence threshold ≥ MIN_OCR_CONFIDENCE (default 40)
         │           and filters out noise (single non-alphanumeric char or bbox area < MIN_BBOX_AREA)
+        │  Cleans: strip leading and trailing non-alphanumeric characters from each
+        │          block's text field (e.g. "@ Wheat flour" → "Wheat flour",
+        │          "®@ Cocoa powder" → "Cocoa powder")
+        │          If the stripped text is empty or whitespace-only, discard the block
         │  Output: list of TextBlock { text, bbox: (x,y,w,h), confidence }
         │  No text found: return 200 + original image + status=no_text_found
         │
@@ -70,7 +74,10 @@ POST /api/v1/translate-image (multipart/form-data: file)
 [Node 5] TextTranslator                             ◄─── retry point
         │  Tool: Gemini API gemini-1.5-flash
         │  Strategy: batch all blocks into a single prompt to minimize API calls
-        │  Prompt format: numbered list of source text strings
+        │  Prompt format: numbered list of source text strings; prompt must explicitly
+        │                 instruct: translate every string to English without exception,
+        │                 including words that resemble English or appear to be proper
+        │                 nouns — do not leave any string unchanged
         │  Response format: JSON array of translated strings (same order/count)
         │  Maps: translated string back to each TextBlock by index
         │  Output: list of TranslatedBlock { original_text, translated_text, bbox }

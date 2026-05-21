@@ -69,3 +69,17 @@ This document details the modifications made to the project markdown files (`.md
 - **Node / Unit Statuses**:
   - Marked all nodes and units as `[x]` Completed.
   - Updated notes to reflect the completed state of the preprocessor, OCRExtractor noise filters, LanguageDetector OSD script detection, ImageCompositor text color sampling, and OutputVerifier preprocessing support.
+
+---
+
+## 7. Additional MD Updates (2026-05-22)
+
+- **Context/architecture.md**:
+  - Added a "Cleans" step to Node 3 OCRExtractor to strip leading/trailing non-alphanumeric characters and discard empty text blocks (Failure 1).
+  - Explicitly updated the prompt format in Node 5 TextTranslator to instruct Gemini to translate every string without exception (Failure 2).
+- **Context/code-standards.md**:
+  - Documented the text-cleaning requirement under the OCR/Text Extraction section.
+  - Documented the translation prompt requirement in the Gemini API section.
+- **README.md**:
+  - Added two new entries under "Known Limitations" covering *Graphical symbols rendered as text* and *Partial translations on English-resembling words* (Failure 3).
+

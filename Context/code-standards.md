@@ -55,6 +55,11 @@
 
 - Bounding box filtering: filter out single non-alphanumeric characters or blocks with a bounding box area (w * h) below `MIN_BBOX_AREA` to avoid rendering noise artifacts.
 - Filter out blocks that do not meet the minimum confidence threshold (`MIN_OCR_CONFIDENCE`).
+- Text cleaning: after grouping, strip leading and trailing non-alphanumeric characters
+  from each block's text field before storing it in TextBlock. Examples:
+  "@ Wheat flour" → "Wheat flour", "®@ Cocoa powder (12%)" → "Cocoa powder (12%)".
+  If the stripped text is empty or whitespace-only, discard the block — do not pass
+  it to downstream nodes.
 
 ## Language Detection (LanguageDetector node)
 
@@ -75,7 +80,9 @@
 - Always use `gemini-1.5-flash` — never hardcode another model; read from config
 - Send all text blocks in a single API call per image (batch prompt) to minimize
   quota usage
-- Prompt must specify: return a JSON array of translated strings in the same order as
+- Prompt must specify: translate every string to English without exception — including
+  strings that resemble English words or appear to be proper nouns; do not leave any
+  string unchanged; return a JSON array of translated strings in the same order as
   input, no explanations, no preamble, just the JSON array
 - Parse the response as JSON immediately; if parse fails, raise `TranslationError`
 - Do not send the image to Gemini — send extracted text strings only; Gemini is used

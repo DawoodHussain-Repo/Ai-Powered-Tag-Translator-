@@ -49,6 +49,19 @@ curl http://localhost:8000/api/v1/health
 
 ## Known Limitations
 
+- **Graphical symbols rendered as text**: Non-text symbols such as warning triangles
+  (▲), bullet dots (•), and decorative glyphs may be OCR'd as alphanumeric characters
+  (e.g. "A", "@", "®@") and rendered in the output. A text-cleaning step strips leading
+  and trailing non-alphanumeric characters from each OCR block, which catches most cases,
+  but embedded symbols within a text block are not filtered.
+
+- **Partial translations on English-resembling words**: Gemini may leave Spanish words
+  that visually resemble English unchanged (e.g. "Sólo" left as-is instead of translated
+  to "Only", "Cancelación" left instead of "Cancellation"). The Gemini prompt explicitly
+  instructs translation of every string without exception, which reduces but does not
+  eliminate this behaviour. Accented characters are the main trigger.
+
+
 - **Prototype boundary**: Built as a proof-of-concept prototype, not for production deployment.
 - **No authentication or rate limiting**: The endpoints are open and unsecured.
 - **Single image per request**: Batch processing of multiple images in a single API call is out of scope.
