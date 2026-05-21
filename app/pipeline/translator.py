@@ -28,6 +28,8 @@ def _build_translation_prompt(
 
     base_instruction = (
         f"Translate the following {source_language} text items to English. "
+        "Translate every string to English without exception — including strings that resemble English words "
+        "or appear to be proper nouns. Do not leave any string unchanged. "
         "Return ONLY a JSON array of translated strings in the same order. "
         "No explanations, no preamble, no markdown formatting — just the "
         "raw JSON array."

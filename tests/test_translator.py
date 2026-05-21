@@ -48,6 +48,12 @@ class TestBuildTranslationPrompt:
         assert "JSON array" in prompt
         assert "es" in prompt
 
+    def test_translation_instruction_in_prompt(self) -> None:
+        blocks = [_block("Hola")]
+        prompt = _build_translation_prompt(blocks, "es")
+        assert "Translate every string to English without exception" in prompt
+        assert "Do not leave any string unchanged" in prompt
+
     def test_retry_prompt_adds_emphasis(self) -> None:
         blocks = [_block("Hola")]
         prompt = _build_translation_prompt(blocks, "es", retry=True)

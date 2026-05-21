@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from app.config import Settings
 from app.exceptions import OCRError
 from app.models.schemas import TextBlock
-from app.pipeline.ocr import extract_text, _group_words_into_blocks, _is_noise
+from app.pipeline.ocr import extract_text, _group_words_into_blocks, _is_noise, _clean_block_text
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +255,43 @@ class TestNoiseFiltering:
         blocks = _group_words_into_blocks(ocr_data, min_confidence=0, min_bbox_area=100)
         assert len(blocks) == 1
         assert blocks[0].text == "Edge"
+
+
+class TestTextCleaning:
+    """Tests for text cleaning logic (Failure 1)."""
+
+    def test_clean_block_text_leading_noise(self) -> None:
+        """Leading noise characters are stripped, but whitespace is trimmed."""
+        assert _clean_block_text("@ Wheat flour") == "Wheat flour"
+        assert _clean_block_text("®@ Cocoa powder (12%)") == "Cocoa powder (12%)"
+        assert _clean_block_text("• Hello") == "Hello"
+
+    def test_clean_block_text_non_alphanumeric_discarded(self) -> None:
+        """If a block contains only leading/trailing non-alphanumeric noise, it is cleaned to empty."""
+        assert _clean_block_text("•") == ""
+        assert _clean_block_text("®@") == ""
+        assert _clean_block_text("   ") == ""
+
+    def test_group_words_into_blocks_cleans_and_filters_empty(self) -> None:
+        """Grouping words into blocks applies text cleaning and discards empty blocks."""
+        ocr_data = {
+            "text": ["®@", "Cocoa", "powder", "(12%)", "•"],
+            "conf": [90, 90, 90, 90, 90],
+            "block_num": [1, 2, 2, 2, 3],
+            "par_num": [1, 1, 1, 1, 1],
+            "line_num": [1, 1, 1, 1, 1],
+            "left": [10, 50, 100, 150, 200],
+            "top": [10, 10, 10, 10, 10],
+            "width": [30, 40, 40, 40, 20],
+            "height": [20, 20, 20, 20, 20],
+        }
+        # MIN_BBOX_AREA = 10 to ensure the small blocks aren't filtered purely by area
+        blocks = _group_words_into_blocks(ocr_data, min_confidence=0, min_bbox_area=10)
+        # Block 1 ("®@") should be empty after cleaning and discarded.
+        # Block 3 ("•") should be empty after cleaning and discarded.
+        # Block 2 ("Cocoa powder (12%)") should be cleaned and kept.
+        assert len(blocks) == 1
+        assert blocks[0].text == "Cocoa powder (12%)"
 
 
 # ---------------------------------------------------------------------------

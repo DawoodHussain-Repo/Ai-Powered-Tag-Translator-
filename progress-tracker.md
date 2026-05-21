@@ -6,9 +6,9 @@ This document tracks the implementation status of all pipeline nodes, workflow u
 
 - `[x]` **Node 1: InputValidator** (Unit 2)
 - `[x]` **Node 2: ImagePreprocessor** (Unit 3) - *Completed*
-- `[x]` **Node 3: OCRExtractor** (Unit 4) - *Completed and updated with noise filtering and MIN_BBOX_AREA*
+- `[x]` **Node 3: OCRExtractor** (Unit 4) - *Completed and updated with noise filtering, MIN_BBOX_AREA, and text-cleaning (Failure 1)*
 - `[x]` **Node 4: LanguageDetector** (Unit 5) - *Completed and updated with pytesseract OSD script detection*
-- `[x]` **Node 5: TextTranslator** (Unit 6)
+- `[x]` **Node 5: TextTranslator** (Unit 6) - *Completed and updated with translation prompt enforcement (Failure 2)*
 - `[x]` **Node 6: ImageCompositor** (Unit 7) - *Completed and updated for light-on-dark text sampling*
 - `[x]` **Node 7: OutputVerifier** (Unit 8) - *Completed and updated with heuristic check and preprocessing support*
 - `[x]` **Node 8: ResponseSerializer** (Unit 9)

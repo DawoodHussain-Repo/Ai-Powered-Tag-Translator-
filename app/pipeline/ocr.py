@@ -19,6 +19,34 @@ def _is_noise(text: str) -> bool:
     return len(text) == 1 and not text.isalnum()
 
 
+def _clean_block_text(text: str) -> str:
+    """Strip leading and trailing non-alphanumeric noise characters from a block's text.
+
+    Leading characters are stripped if they are not alphanumeric and not common
+    opening punctuation/symbols (like currency signs or opening brackets).
+    Trailing characters are stripped if they are not alphanumeric and not common
+    closing/ending punctuation/symbols (like closing brackets, percent, or period).
+    """
+    text = text.strip()
+    if not text:
+        return ""
+
+    allowed_leading = set("($€£¥[{\"'-")
+    allowed_trailing = set(".,!?)]}%:;-\"'")
+
+    # Clean from the left
+    start = 0
+    while start < len(text) and not (text[start].isalnum() or text[start] in allowed_leading):
+        start += 1
+
+    # Clean from the right
+    end = len(text)
+    while end > start and not (text[end - 1].isalnum() or text[end - 1] in allowed_trailing):
+        end -= 1
+
+    return text[start:end].strip()
+
+
 def _group_words_into_blocks(
     ocr_data: dict,
     min_confidence: int,
@@ -32,6 +60,7 @@ def _group_words_into_blocks(
 
     Words with confidence below ``min_confidence`` are discarded.
     After grouping, blocks are filtered to remove noise:
+    - Text cleaning strips leading/trailing non-alphanumeric noise characters
     - Single non-alphanumeric character blocks
     - Blocks with bbox area (w × h) below ``min_bbox_area``
     """
@@ -78,8 +107,13 @@ def _group_words_into_blocks(
         w = x_max - x_min
         h = y_max - y_min
 
+        # Clean text and discard block if empty or whitespace-only
+        cleaned_text = _clean_block_text(combined_text)
+        if not cleaned_text:
+            continue
+
         # Noise filter: skip single non-alphanumeric characters
-        if _is_noise(combined_text):
+        if _is_noise(cleaned_text):
             continue
 
         # Noise filter: skip blocks with bounding box area below threshold
@@ -88,7 +122,7 @@ def _group_words_into_blocks(
 
         blocks.append(
             TextBlock(
-                text=combined_text,
+                text=cleaned_text,
                 bbox=(x_min, y_min, w, h),
                 confidence=round(avg_conf, 2),
             )
