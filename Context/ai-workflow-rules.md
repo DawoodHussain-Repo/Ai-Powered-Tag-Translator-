@@ -20,7 +20,7 @@ before the next begins.
 3. **Node 2 — ImagePreprocessor** — sample border pixels for median brightness, invert
    copy on dark backgrounds for OCR; unit test with dark/light backgrounds
 4. **Node 3 — OCRExtractor** — pytesseract `image_to_data`, block grouping, confidence
-   filter, noise filtering (non-alphanumeric, bbox area < MIN_BBOX_AREA); unit test against a known image with text
+    filter, noise filtering (non-alphanumeric, bbox area < MIN_BBOX_AREA, strip leading/trailing non-alphanumeric noise and discard empty blocks); unit test against a known image with text
 5. **Node 4 — LanguageDetector** — pytesseract OSD script detection on preprocessed image;
    if Latin script, langdetect on concatenated OCR text for English early-return;
    fail-open on any detection error; unit test covers: non-Latin script proceeds to

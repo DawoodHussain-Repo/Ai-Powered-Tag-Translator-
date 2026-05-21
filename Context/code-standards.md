@@ -55,9 +55,11 @@
 
 - Bounding box filtering: filter out single non-alphanumeric characters or blocks with a bounding box area (w * h) below `MIN_BBOX_AREA` to avoid rendering noise artifacts.
 - Filter out blocks that do not meet the minimum confidence threshold (`MIN_OCR_CONFIDENCE`).
-- Text cleaning: after grouping, strip leading and trailing non-alphanumeric characters
-  from each block's text field before storing it in TextBlock. Examples:
-  "@ Wheat flour" → "Wheat flour", "®@ Cocoa powder (12%)" → "Cocoa powder (12%)".
+- Text cleaning: after grouping, strip leading and trailing characters from each block's
+  text field if they are not alphanumeric and not in the allowed leading/trailing whitelists:
+  - Allowed leading (currency signs, opening quotes/brackets): `($€£¥[{"'-`
+  - Allowed trailing (common punctuation, percent, closing quotes/brackets): `.,!?)]}%:;-"'`
+  Examples: "@ Wheat flour" → "Wheat flour", "®@ Cocoa powder (12%)" → "Cocoa powder (12%)".
   If the stripped text is empty or whitespace-only, discard the block — do not pass
   it to downstream nodes.
 

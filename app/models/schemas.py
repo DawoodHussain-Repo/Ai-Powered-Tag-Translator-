@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class TextBlock(BaseModel):
     """A single block of text extracted by OCR with its bounding box.
 
-    Produced by Node 2 (OCRExtractor).
+    Produced by Node 3 (OCRExtractor).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -21,7 +21,7 @@ class TextBlock(BaseModel):
 class TranslatedBlock(BaseModel):
     """A text block after translation, mapping original to translated text.
 
-    Produced by Node 4 (TextTranslator).
+    Produced by Node 5 (TextTranslator).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -34,7 +34,7 @@ class TranslatedBlock(BaseModel):
 class PipelineResult(BaseModel):
     """Final response payload returned by the API.
 
-    Produced by Node 7 (ResponseSerializer).
+    Produced by Node 8 (ResponseSerializer).
     """
 
     model_config = ConfigDict(frozen=True)

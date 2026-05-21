@@ -76,10 +76,13 @@ This document details the modifications made to the project markdown files (`.md
 
 - **Context/architecture.md**:
   - Added a "Cleans" step to Node 3 OCRExtractor to strip leading/trailing non-alphanumeric characters and discard empty text blocks (Failure 1).
+  - Detailed the specific whitelists of allowed leading and trailing punctuation characters to preserve currency symbols and valid trailing punctuation.
   - Explicitly updated the prompt format in Node 5 TextTranslator to instruct Gemini to translate every string without exception (Failure 2).
 - **Context/code-standards.md**:
-  - Documented the text-cleaning requirement under the OCR/Text Extraction section.
+  - Documented the text-cleaning requirement under the OCR/Text Extraction section, detailing the specific whitelists of allowed leading and trailing punctuation.
   - Documented the translation prompt requirement in the Gemini API section.
 - **README.md**:
   - Added two new entries under "Known Limitations" covering *Graphical symbols rendered as text* and *Partial translations on English-resembling words* (Failure 3).
+- **app/models/schemas.py** (Code alignment):
+  - Corrected pipeline Node indexes in Pydantic schema docstrings (Node 3 OCRExtractor, Node 5 TextTranslator, Node 8 ResponseSerializer) to ensure perfect consistency.
 

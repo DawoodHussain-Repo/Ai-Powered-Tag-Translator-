@@ -24,8 +24,8 @@ platform where vendors upload packaging or promotional images in non-English lan
 2. API validates the file (type, size, openable)
 3. API preprocesses the image — samples border pixel brightness and inverts the image
    for dark-background images to recover white-on-dark text
-4. API runs OCR on the preprocessed image and extracts all text blocks with their
-   bounding boxes
+4. API runs OCR on the preprocessed image, extracts all text blocks with their
+   bounding boxes, cleans leading/trailing non-alphanumeric noise, and discards empty blocks
 5. API runs script detection (pytesseract OSD) on the preprocessed image; for
    Latin-script results, langdetect runs on the OCR text to identify the language
 6. If the text is detected as English with sufficient confidence, the original image
@@ -45,14 +45,15 @@ platform where vendors upload packaging or promotional images in non-English lan
 - Image validation: extension allowlist, MIME type sniffing, file size cap, PIL open check
 - Image preprocessing: border pixel brightness sampling; inversion applied to dark-background
   images before OCR to recover white-on-dark text
-- OCR extraction: pytesseract `image_to_data()` for word/block-level text with bounding boxes
+- OCR extraction: pytesseract `image_to_data()` for word/block-level text with bounding boxes;
+  strips leading/trailing non-alphanumeric noise characters from blocks and discards empty blocks
 - Script detection: pytesseract OSD on preprocessed image determines script family
 - Language detection: langdetect on concatenated OCR text, only for Latin-script images;
   fails open on low confidence or errors
 - Early return: if OSD returns Latin script AND langdetect detects English with
   confidence ≥ LANGDETECT_MIN_CONFIDENCE, return original image with no Gemini call
-- Translation: Gemini API (gemini-1.5-flash) via text-only prompt — one call per text block
-  or batched blocks per image
+- Translation: Gemini API (gemini-1.5-flash) via text-only prompt — always batched blocks per image
+  to minimize API calls, with prompt explicitly enforcing translation of every string without exception
 - Image compositing: Pillow fills each bounding box with a sampled background color,
   then draws translated text with auto-scaled font to fit the bounding box
 - Output verification: re-OCR of the preprocessed/inverted version of the composited image;

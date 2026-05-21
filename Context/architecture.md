@@ -49,9 +49,10 @@ POST /api/v1/translate-image (multipart/form-data: file)
         │           (group by block_num + par_num + line_num from tesseract output)
         │  Filters: confidence threshold ≥ MIN_OCR_CONFIDENCE (default 40)
         │           and filters out noise (single non-alphanumeric char or bbox area < MIN_BBOX_AREA)
-        │  Cleans: strip leading and trailing non-alphanumeric characters from each
-        │          block's text field (e.g. "@ Wheat flour" → "Wheat flour",
-        │          "®@ Cocoa powder" → "Cocoa powder")
+        │  Cleans: strip leading and trailing characters from each block's text if they are not
+        │          alphanumeric AND not in the allowed leading/trailing whitelists (allowed leading:
+        │          `($€£¥[{"'-`, allowed trailing: `.,!?)]}%:;-"'`). E.g. "@ Wheat flour" → "Wheat flour",
+        │          "®@ Cocoa powder (12%)" → "Cocoa powder (12%)".
         │          If the stripped text is empty or whitespace-only, discard the block
         │  Output: list of TextBlock { text, bbox: (x,y,w,h), confidence }
         │  No text found: return 200 + original image + status=no_text_found
