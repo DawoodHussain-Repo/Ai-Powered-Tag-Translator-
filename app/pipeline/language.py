@@ -17,7 +17,7 @@ def detect_language(blocks: list[TextBlock]) -> str:
         An ISO 639-1 language code (e.g. ``"es"``, ``"en"``, ``"zh-cn"``).
         Returns ``"unknown"`` if detection fails or is indeterminate.
     """
-    combined = " ".join(block.text for block in blocks).strip()
+    combined = " ".join(block.text for block in blocks).strip().lower()
     if not combined:
         return "unknown"
 

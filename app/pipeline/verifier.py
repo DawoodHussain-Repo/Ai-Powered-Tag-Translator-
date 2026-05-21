@@ -29,7 +29,7 @@ def verify_output(image: Image.Image) -> Literal["pass", "fail"]:
         return "fail"
 
     try:
-        detected_lang = detect(extracted_text)
+        detected_lang = detect(extracted_text.lower())
     except Exception:
         return "fail"
 
