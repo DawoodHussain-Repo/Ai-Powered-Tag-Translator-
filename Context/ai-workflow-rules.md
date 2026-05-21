@@ -17,20 +17,22 @@ before the next begins.
    `NotoSans-Regular.ttf` in `assets/fonts/`, `.env.example`, basic health check route
 2. **Node 1 — InputValidator** — file extension, MIME sniff, size cap, PIL open check;
    unit test with valid + invalid inputs
-3. **Node 2 — OCRExtractor** — pytesseract `image_to_data`, block grouping, confidence
-   filter; unit test against a known image with text
-4. **Node 3 — LanguageDetector** — langdetect on block text, early-return logic for
-   English; unit test with English and Spanish text strings
-5. **Node 4 — TextTranslator** — Gemini API batch prompt, JSON response parsing,
+3. **Node 2 — ImagePreprocessor** — sample border pixels for median brightness, adaptive
+   threshold/invert copy on dark backgrounds for OCR; unit test with dark/light backgrounds
+4. **Node 3 — OCRExtractor** — pytesseract `image_to_data`, block grouping, confidence
+   filter, noise filtering (non-alphanumeric, bbox area < MIN_BBOX_AREA); unit test against a known image with text
+5. **Node 4 — LanguageDetector** — pytesseract OSD script detection on preprocessed image,
+   early-return logic for English/Latin; unit test with English and Spanish text images
+6. **Node 5 — TextTranslator** — Gemini API batch prompt, JSON response parsing,
    TranslationError mapping; unit test with a mocked Gemini response
-6. **Node 5 — ImageCompositor** — background sampling, bbox fill, font auto-scale,
+7. **Node 6 — ImageCompositor** — background sampling, bbox fill, font auto-scale,
    text draw, coordinate clamping; unit test confirms output differs from input only
    in text regions
-7. **Node 6 — OutputVerifier** — re-OCR, langdetect, retry routing; unit test confirms
-   retry is triggered exactly once on first failure
-8. **Node 7 — ResponseSerializer** — base64 encode, PipelineResult construction
-9. **Route handler** — orchestrate all nodes; map domain exceptions to HTTP responses
-10. **Integration test** — run the full pipeline against all provided sample images;
+8. **Node 7 — OutputVerifier** — re-OCR, pytesseract OSD script detection, retry routing;
+   unit test confirms retry is triggered exactly once on first failure
+9. **Node 8 — ResponseSerializer** — base64 encode, PipelineResult construction
+10. **Route handler** — orchestrate all nodes; map domain exceptions to HTTP responses
+11. **Integration test** — run the full pipeline against all provided sample images;
     verify output images visually and by re-OCR
 
 ## Scoping Rules

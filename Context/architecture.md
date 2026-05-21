@@ -6,7 +6,7 @@
 | -------------- | --------------------------------- | ---------------------------------------------------------- |
 | Framework      | FastAPI + Python 3.11+            | REST API server, request lifecycle, error handling         |
 | OCR            | pytesseract (Tesseract 5.x)       | Text extraction with bounding boxes from images            |
-| Language Det.  | langdetect                        | Identify source language of extracted text                 |
+| Script Det.    | pytesseract OSD                   | Identify script/language properties of extracted text      |
 | Translation    | Gemini API (gemini-1.5-flash)     | Text-only translation of OCR-extracted blocks to English   |
 | Compositing    | Pillow (PIL)                      | Erase original text regions, draw translated text          |
 | Font Rendering | Pillow ImageFont + bundled TTF    | Auto-scaled text rendering at original bounding box coords |
@@ -17,7 +17,7 @@
 
 The pipeline is a linear sequence of discrete, single-responsibility steps.
 Each step receives the output of the previous step and passes its output forward.
-Steps 4–5 can be retried once if the output verification step fails.
+Steps 5–6 can be retried once if the output verification step fails.
 
 ```
 POST /api/v1/translate-image (multipart/form-data: file)
@@ -32,35 +32,46 @@ POST /api/v1/translate-image (multipart/form-data: file)
         │  Failure: raises ValidationError → 400 + error code
         │
         ▼
-[Node 2] OCRExtractor
-        │  Tool: pytesseract.image_to_data(image, output_type=Output.DICT)
+[Node 2] ImagePreprocessor
+        │  Method: Sample border pixels of the image, compute median brightness
+        │  Dark background: If median brightness < 128, produce an adaptive-thresholded
+        │                  or inverted copy of the image to serve as the OCR input
+        │  Light background: Pass through the original image unchanged
+        │  Output: PIL Image (either original or preprocessed for OCR only)
+        │  Invariant: Preprocessed image is only used for OCRExtractor and LanguageDetector;
+        │             original unmodified image is always passed to downstream compositor
+        │
+        ▼
+[Node 3] OCRExtractor
+        │  Tool: pytesseract.image_to_data(preprocessed_image, output_type=Output.DICT)
         │  Extracts: text, confidence, left, top, width, height per word
         │  Groups: consecutive words into block-level text chunks
         │           (group by block_num + par_num + line_num from tesseract output)
         │  Filters: confidence threshold ≥ MIN_OCR_CONFIDENCE (default 40)
+        │           and filters out noise (single non-alphanumeric char or bbox area < MIN_BBOX_AREA)
         │  Output: list of TextBlock { text, bbox: (x,y,w,h), confidence }
         │  No text found: return 200 + original image + status=no_text_found
         │
         ▼
-[Node 3] LanguageDetector
-        │  Tool: langdetect.detect() on concatenated block text
-        │  Output: ISO 639-1 language code (e.g. "es", "zh-cn", "ar")
-        │  Already English: return 200 + original image + status=already_english
-        │                    (no Gemini call made)
-        │  Failure / undetermined: proceed to translation with lang="unknown"
+[Node 4] LanguageDetector
+        │  Tool: pytesseract.image_to_osd(preprocessed_image) to determine script
+        │  Output: Script/Language information (e.g. "Latin", "Cyrillic")
+        │  Already English/Latin script match: return 200 + original image + status=already_english
+        │                                       (no Gemini call made)
+        │  Failure / undetermined / non-Latin: proceed to translation with lang="unknown"
         │
         ▼
-[Node 4] TextTranslator                             ◄─── retry point
+[Node 5] TextTranslator                             ◄─── retry point
         │  Tool: Gemini API gemini-1.5-flash
         │  Strategy: batch all blocks into a single prompt to minimize API calls
         │  Prompt format: numbered list of source text strings
         │  Response format: JSON array of translated strings (same order/count)
         │  Maps: translated string back to each TextBlock by index
         │  Output: list of TranslatedBlock { original_text, translated_text, bbox }
-        │  Failure: raises TranslationError → 500 (or retry trigger from Node 6)
+        │  Failure: raises TranslationError → 500 (or retry trigger from Node 7)
         │
         ▼
-[Node 5] ImageCompositor                            ◄─── retry point
+[Node 6] ImageCompositor                            ◄─── retry point
         │  Step A — Erase original text:
         │    For each bbox, sample background color from a 5px border around the bbox
         │    Fill the bbox region with the sampled color using PIL ImageDraw.rectangle()
@@ -74,17 +85,17 @@ POST /api/v1/translate-image (multipart/form-data: file)
         │  Failure: raises CompositorError → 500
         │
         ▼
-[Node 6] OutputVerifier
+[Node 7] OutputVerifier
         │  Tool: pytesseract.image_to_string() on composited image
-        │  Detects: langdetect on the re-OCR'd text
-        │  Pass: detected language is "en" → proceed to response
-        │  Fail (first time): route back to Node 4 with retry_count=1 and
+        │  Detects: pytesseract OSD script check on the re-OCR'd text
+        │  Pass: detected script/language matches expected English -> proceed to response
+        │  Fail (first time): route back to Node 5 with retry_count=1 and
         │                      an adjusted prompt (more explicit translation instruction)
         │  Fail (second time): return 200 with partial output + status=verification_failed
         │                       (do not 500 — partial output is still useful)
         │
         ▼
-[Node 7] ResponseSerializer
+[Node 8] ResponseSerializer
            Encodes composited image as base64 (JPEG, quality=90)
            Builds JSON response:
              {
@@ -103,12 +114,13 @@ POST /api/v1/translate-image (multipart/form-data: file)
   orchestrates the pipeline by calling each node in order
 - `app/pipeline/` — One module per pipeline node; no node imports another node directly
 - `app/pipeline/validator.py` — Node 1: InputValidator
-- `app/pipeline/ocr.py` — Node 2: OCRExtractor
-- `app/pipeline/language.py` — Node 3: LanguageDetector
-- `app/pipeline/translator.py` — Node 4: TextTranslator (Gemini API client)
-- `app/pipeline/compositor.py` — Node 5: ImageCompositor (Pillow logic)
-- `app/pipeline/verifier.py` — Node 6: OutputVerifier
-- `app/pipeline/serializer.py` — Node 7: ResponseSerializer
+- `app/pipeline/preprocessor.py` — Node 2: ImagePreprocessor
+- `app/pipeline/ocr.py` — Node 3: OCRExtractor
+- `app/pipeline/language.py` — Node 4: LanguageDetector
+- `app/pipeline/translator.py` — Node 5: TextTranslator (Gemini API client)
+- `app/pipeline/compositor.py` — Node 6: ImageCompositor (Pillow logic)
+- `app/pipeline/verifier.py` — Node 7: OutputVerifier
+- `app/pipeline/serializer.py` — Node 8: ResponseSerializer
 - `app/models/` — Pydantic models for TextBlock, TranslatedBlock, PipelineResult, ErrorResponse
 - `app/config.py` — pydantic-settings Config class (GEMINI_API_KEY, MAX_FILE_SIZE_MB, etc.)
 - `assets/fonts/` — Bundled NotoSans-Regular.ttf (covers Latin, CJK subset, Arabic subset)
@@ -137,7 +149,7 @@ POST /api/v1/translate-image (multipart/form-data: file)
    The output image is always derived from the original via Pillow compositing — never
    AI-generated or regenerated.
 3. **If the image is already in English, no external API call is made.**
-   Language detection is local (langdetect); the Gemini API is only called when
+   Language detection is local (pytesseract OSD); the Gemini API is only called when
    translation is actually needed.
 4. **Each pipeline node has a single responsibility.** No node performs two pipeline
    steps. The route handler in `routes.py` is the only place that knows the node order.
@@ -147,3 +159,7 @@ POST /api/v1/translate-image (multipart/form-data: file)
 6. **Bounding box coordinates are always validated before compositing.**
    Coordinates are clamped to image dimensions before any PIL draw call to prevent
    out-of-bounds errors on edge-case OCR results.
+7. **The preprocessed image is used only by OCRExtractor and LanguageDetector, never by ImageCompositor or downstream nodes.**
+   To ensure the visual layout and content of the original image are preserved, any
+   adaptive-thresholded or inverted copy created for improving OCR quality must be kept isolated
+   to the extraction/detection phases. The original unmodified image is always passed to the compositor.

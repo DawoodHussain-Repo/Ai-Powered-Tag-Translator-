@@ -49,8 +49,11 @@ curl http://localhost:8000/api/v1/health
 
 ## Known Limitations
 
-- Prototype only — not for production deployment
-- No authentication or rate limiting
-- Single image per request (no batch processing)
-- Output uses NotoSans font, not the original typeface
-- Complex overlapping or rotated text is not handled
+- **Prototype boundary**: Built as a proof-of-concept prototype, not for production deployment.
+- **No authentication or rate limiting**: The endpoints are open and unsecured.
+- **Single image per request**: Batch processing of multiple images in a single API call is out of scope.
+- **Text alignment is not reconstructed**: Centered or right-aligned text is rendered left-aligned. All translated text is drawn left-aligned from the original bounding box origin.
+- **Font weight and style are not preserved**: Bold, italic, and heavy weight variations are rendered using the single regular-weight font (NotoSans-Regular).
+- **Non-text symbols rendered inconsistently**: Non-text and decorative Unicode characters (such as list bullets `•`) may be stripped out by the OCR noise filter.
+- **Mixed-background images partially fail**: Full-dark or full-light backgrounds are detected globally, but images containing both dark and light sections (e.g. dark headers with light cream bodies) are not preprocessed per-region.
+- **Complex layout constraints**: Rotated, vertical, or overlapping text layouts are not supported.

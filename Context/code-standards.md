@@ -51,6 +51,11 @@
 - `ErrorResponse`: `error: str`, `code: str`
 - All models use `model_config = ConfigDict(frozen=True)` — pipeline data is immutable
 
+## OCR / Text Extraction (OCRExtractor node)
+
+- Bounding box filtering: filter out single non-alphanumeric characters or blocks with a bounding box area (w * h) below `MIN_BBOX_AREA` to avoid rendering noise artifacts.
+- Filter out blocks that do not meet the minimum confidence threshold (`MIN_OCR_CONFIDENCE`).
+
 ## Gemini API (TextTranslator node)
 
 - Always use `gemini-1.5-flash` — never hardcode another model; read from config
@@ -97,7 +102,7 @@
 - `app/` — all application source code
 - `app/main.py` — FastAPI app factory only; no business logic
 - `app/api/routes.py` — route handler(s); pipeline orchestration only
-- `app/pipeline/` — one file per pipeline node; no cross-node imports
+- `app/pipeline/` — one file per pipeline node (`validator.py`, `preprocessor.py`, `ocr.py`, `language.py`, `translator.py`, `compositor.py`, `verifier.py`, `serializer.py`); no cross-node imports
 - `app/models/` — Pydantic data models only; no logic
 - `app/config.py` — pydantic-settings Config; no logic
 - `assets/fonts/` — bundled font files checked into git
@@ -111,4 +116,5 @@
 - `GEMINI_API_KEY` — required; no default
 - `MAX_FILE_SIZE_MB` — optional; default 10
 - `MIN_OCR_CONFIDENCE` — optional; default 40 (0–100 scale from Tesseract)
+- `MIN_BBOX_AREA` — optional; default 100 (in pixels²)
 - `GEMINI_MODEL` — optional; default `gemini-1.5-flash`
