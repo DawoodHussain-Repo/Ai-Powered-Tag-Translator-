@@ -35,5 +35,3 @@ tests/output/
 run_single.py
 run_batch.py
 
-#local Output
-translated_output/
