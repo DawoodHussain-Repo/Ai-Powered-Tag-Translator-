@@ -6,7 +6,7 @@
 | -------------- | --------------------------------- | ---------------------------------------------------------- |
 | Framework      | FastAPI + Python 3.11+            | REST API server, request lifecycle, error handling         |
 | OCR            | pytesseract (Tesseract 5.x)       | Text extraction with bounding boxes from images            |
-| Script Det.    | pytesseract OSD                   | Identify script/language properties of extracted text      |
+| Lang. Det.     | pytesseract OSD + langdetect      | Script detection (OSD) and English early-return (langdetect) |
 | Translation    | Gemini API (gemini-1.5-flash)     | Text-only translation of OCR-extracted blocks to English   |
 | Compositing    | Pillow (PIL)                      | Erase original text regions, draw translated text          |
 | Font Rendering | Pillow ImageFont + bundled TTF    | Auto-scaled text rendering at original bounding box coords |
@@ -54,13 +54,17 @@ POST /api/v1/translate-image (multipart/form-data: file)
         │
         ▼
 [Node 4] LanguageDetector
-        │  Tool: pytesseract.image_to_osd(preprocessed_image) to determine script
-        │  Output: Script information (e.g. "Latin", "Cyrillic")
-        │  Logic: Because English and Spanish both share the Latin script, OSD script
-        │         detection cannot differentiate them. All Latin-script text is sent to
-        │         Gemini for translation. The "already_english" early-return optimization is
-        │         removed for Latin-script images.
-        │  Action: Proceed to translation with detected script info.
+        │  Step 1 — pytesseract.image_to_osd(preprocessed_image)
+        │    Extracts: detected script (e.g. "Latin", "Arabic", "Han", "Cyrillic")
+        │    If non-Latin script: proceed directly to Node 5 — no further detection needed
+        │  Step 2 — langdetect.detect() on concatenated OCR text from Node 3
+        │    Only reached when script is Latin (covers Spanish, English, French, etc.)
+        │    If detected language == "en": early return → 200 + original image +
+        │                                  status=already_english (no Gemini call made)
+        │    If detected language != "en": proceed to Node 5
+        │    If langdetect raises / confidence too low: fail open → proceed to Node 5
+        │  Output: language code string (e.g. "es", "en", "fr") or "unknown"
+        │  Failure: fails open — any detection error proceeds to Node 5, never blocks pipeline
         │
         ▼
 [Node 5] TextTranslator                             ◄─── retry point
@@ -89,8 +93,9 @@ POST /api/v1/translate-image (multipart/form-data: file)
         ▼
 [Node 7] OutputVerifier
         │  Tool: pytesseract.image_to_string() on composited image
-        │  Detects: pytesseract OSD script check on the re-OCR'd text
-        │  Pass: detected script/language matches expected English -> proceed to response
+        │  Check: re-OCR'd text is non-empty AND contains at least one alphabetic token
+        │         of length > 2 (heuristic presence check — not language classification)
+        │  Pass: check passes → proceed to Node 8
         │  Fail (first time): route back to Node 5 with retry_count=1 and
         │                      an adjusted prompt (more explicit translation instruction)
         │  Fail (second time): return 200 with partial output + status=verification_failed
@@ -150,10 +155,12 @@ POST /api/v1/translate-image (multipart/form-data: file)
 2. **Gemini is called only for text translation, never for image generation.**
    The output image is always derived from the original via Pillow compositing — never
    AI-generated or regenerated.
-3. **No local language classification is performed for Latin-script text.**
-   Because OSD script detection cannot distinguish English from Spanish or other Latin-script
-   languages, all Latin-script text is sent to Gemini for translation. Gemini handles
-   the case where text is already English by returning it unchanged.
+3. **Language detection uses OSD for script and langdetect for Latin-script languages.**
+   pytesseract OSD determines the script family. For non-Latin scripts, the pipeline
+   proceeds directly to translation. For Latin-script text, langdetect.detect() is run
+   on the concatenated OCR output to identify the language. If langdetect detects English,
+   the pipeline returns early with no Gemini call. If langdetect fails or is uncertain,
+   the pipeline proceeds to translation (fail open). langdetect is never the sole blocker.
 4. **Each pipeline node has a single responsibility.** No node performs two pipeline
    steps. The route handler in `routes.py` is the only place that knows the node order.
 5. **No background tasks or async work is spawned inside a request handler.**

@@ -21,15 +21,20 @@ before the next begins.
    threshold/invert copy on dark backgrounds for OCR; unit test with dark/light backgrounds
 4. **Node 3 — OCRExtractor** — pytesseract `image_to_data`, block grouping, confidence
    filter, noise filtering (non-alphanumeric, bbox area < MIN_BBOX_AREA); unit test against a known image with text
-5. **Node 4 — LanguageDetector** — pytesseract OSD script detection on preprocessed image,
-   early-return logic for English/Latin; unit test with English and Spanish text images
+5. **Node 4 — LanguageDetector** — pytesseract OSD script detection on preprocessed image;
+   if Latin script, langdetect on concatenated OCR text for English early-return;
+   fail-open on any detection error; unit test covers: non-Latin script proceeds to
+   translation, English Latin-script returns early, Spanish Latin-script proceeds to
+   translation, langdetect failure proceeds to translation
 6. **Node 5 — TextTranslator** — Gemini API batch prompt, JSON response parsing,
    TranslationError mapping; unit test with a mocked Gemini response
 7. **Node 6 — ImageCompositor** — background sampling, bbox fill, font auto-scale,
    text draw, coordinate clamping; unit test confirms output differs from input only
    in text regions
-8. **Node 7 — OutputVerifier** — re-OCR, pytesseract OSD script detection, retry routing;
-   unit test confirms retry is triggered exactly once on first failure
+8. **Node 7 — OutputVerifier** — re-OCR via pytesseract.image_to_string(), heuristic
+   presence check (non-empty text with alphabetic tokens of length > 2), retry routing;
+   unit test confirms retry is triggered exactly once on first failure and that empty
+   OCR output triggers the fail path
 9. **Node 8 — ResponseSerializer** — base64 encode, PipelineResult construction
 10. **Route handler** — orchestrate all nodes; map domain exceptions to HTTP responses
 11. **Integration test** — run the full pipeline against all provided sample images;

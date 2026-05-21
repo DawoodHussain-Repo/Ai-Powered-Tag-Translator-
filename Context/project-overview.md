@@ -23,9 +23,10 @@ platform where vendors upload packaging or promotional images in non-English lan
    `POST /api/v1/translate-image`
 2. API validates the file (type, size, openable)
 3. API runs OCR on the image and extracts all text blocks with their bounding boxes
-4. API detects the source language of the extracted text
-5. If the image is already in English, the original image is returned immediately
-   with a flag indicating no translation was needed
+4. API runs script detection (pytesseract OSD) on the preprocessed image; for
+   Latin-script results, langdetect runs on the OCR text to identify the language
+5. If the text is detected as English with sufficient confidence, the original image
+   is returned immediately with status=already_english and no Gemini call is made
 6. API sends extracted text to Gemini for English translation (per block)
 7. API composites the output: fills original text bounding boxes with sampled background
    color, then draws translated text at the same positions using Pillow
@@ -40,14 +41,20 @@ platform where vendors upload packaging or promotional images in non-English lan
 
 - Image validation: extension allowlist, MIME type sniffing, file size cap, PIL open check
 - OCR extraction: pytesseract `image_to_data()` for word/block-level text with bounding boxes
-- Language detection: langdetect on concatenated OCR text
-- Early return: if already English, skip all AI calls and return the original
+- Image preprocessing: border pixel brightness sampling; adaptive threshold/invert
+  applied to dark-background images before OCR to recover white-on-dark text
+- Script detection: pytesseract OSD on preprocessed image determines script family
+- Language detection: langdetect on concatenated OCR text, only for Latin-script images;
+  fails open on low confidence or errors
+- Early return: if OSD returns Latin script AND langdetect detects English with
+  confidence ≥ LANGDETECT_MIN_CONFIDENCE, return original image with no Gemini call
 - Translation: Gemini API (gemini-1.5-flash) via text-only prompt — one call per text block
   or batched blocks per image
 - Image compositing: Pillow fills each bounding box with a sampled background color,
   then draws translated text with auto-scaled font to fit the bounding box
-- Output verification: re-OCR of the composited image; if English is not detected, one
-  retry of steps 4–5 before returning a 500 with partial output
+- Output verification: re-OCR of the composited image; heuristic presence check
+  confirms non-empty alphabetic text; if check fails, one retry of translation and
+  compositing before returning 200 with partial output and status=verification_failed
 - Structured JSON response with base64 output image, source language, per-block metadata,
   and verification status
 
@@ -55,7 +62,8 @@ platform where vendors upload packaging or promotional images in non-English lan
 
 - 400 on invalid file type, corrupt image, or file too large
 - 200 with original image and `status: no_text_found` if OCR finds nothing
-- 200 with original image and `status: already_english` if source language is English
+- 200 with original image and `status: already_english` if OSD returns Latin script
+  and langdetect detects English with sufficient confidence — no Gemini call made
 - 500 with error code if Gemini call fails or compositing fails after retry
 
 ## Scope
@@ -63,7 +71,9 @@ platform where vendors upload packaging or promotional images in non-English lan
 ### In Scope
 
 - Single image per request
-- Languages detectable by langdetect and readable by Tesseract
+- Any language readable by Tesseract; source language identification via OSD +
+  langdetect for the English early-return path only; translation handled by Gemini
+  without requiring source language to be known
 - JPEG, PNG, and WEBP input formats
 - Returning the output as base64 in a JSON response body
 - Local execution only — no hosting or deployment
@@ -82,7 +92,8 @@ platform where vendors upload packaging or promotional images in non-English lan
 1. A POST request with a Spanish-language product image returns a 200 with a correctly
    translated output image where the original text positions are visually preserved
 2. A POST request with an already-English image returns a 200 with the original image
-   and `status: already_english` — no Gemini call is made
+   and `status: already_english` — OSD confirms Latin script, langdetect confirms
+   English, and no Gemini call is made
 3. A POST request with a non-image file returns a 400 with a clear error code
 4. The pipeline handles at least the provided sample image set without errors
 5. `README.md` covers how to run locally, an example curl request, and known limitations

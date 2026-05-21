@@ -56,6 +56,20 @@
 - Bounding box filtering: filter out single non-alphanumeric characters or blocks with a bounding box area (w * h) below `MIN_BBOX_AREA` to avoid rendering noise artifacts.
 - Filter out blocks that do not meet the minimum confidence threshold (`MIN_OCR_CONFIDENCE`).
 
+## Language Detection (LanguageDetector node)
+
+- Always run pytesseract.image_to_osd() first — it is local, zero-cost, and handles
+  non-Latin scripts (Arabic, Cyrillic, Han, etc.) without needing langdetect
+- Only call langdetect when OSD returns a Latin script result
+- langdetect.detect() returns a language code and an implicit confidence via
+  langdetect.detect_langs() — if the top result probability is below
+  LANGDETECT_MIN_CONFIDENCE, treat as uncertain and fail open (proceed to translation)
+- Never raise an exception from LanguageDetector — all failure modes fail open
+- The "already_english" early return fires only when:
+    1. OSD returns Latin script, AND
+    2. langdetect returns "en" with confidence ≥ LANGDETECT_MIN_CONFIDENCE
+- In all other cases the pipeline proceeds to TextTranslator
+
 ## Gemini API (TextTranslator node)
 
 - Always use `gemini-1.5-flash` — never hardcode another model; read from config
@@ -118,3 +132,18 @@
 - `MIN_OCR_CONFIDENCE` — optional; default 40 (0–100 scale from Tesseract)
 - `MIN_BBOX_AREA` — optional; default 100 (in pixels²)
 - `GEMINI_MODEL` — optional; default `gemini-1.5-flash`
+- `LANGDETECT_MIN_CONFIDENCE` — optional; default 0.9 (0.0–1.0; below this threshold
+  langdetect result is treated as uncertain and pipeline fails open to translation)
+
+## Dependencies (pip install)
+
+- fastapi
+- uvicorn
+- python-multipart
+- Pillow
+- pytesseract
+- langdetect
+- google-generativeai
+- pydantic-settings
+- python-dotenv
+- python-magic
